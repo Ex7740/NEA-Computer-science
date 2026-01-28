@@ -1,0 +1,10 @@
+C:\Users\dexte\OneDrive\Desktop\NEA\Code\Program_code\Blocks_for_arduino\target\debug\deps\ecolor-710824ad5a0248d6.d: C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\lib.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\color32.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hsva_gamma.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hsva.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\rgba.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hex_color_runtime.rs
+
+C:\Users\dexte\OneDrive\Desktop\NEA\Code\Program_code\Blocks_for_arduino\target\debug\deps\libecolor-710824ad5a0248d6.rmeta: C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\lib.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\color32.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hsva_gamma.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hsva.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\rgba.rs C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hex_color_runtime.rs
+
+C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\lib.rs:
+C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\color32.rs:
+C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hsva_gamma.rs:
+C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hsva.rs:
+C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\rgba.rs:
+C:\Users\dexte\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ecolor-0.33.0\src\hex_color_runtime.rs:
