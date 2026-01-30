@@ -1,0 +1,17 @@
+{
+    "block": {
+      "sections": [
+        {
+          "id": "Show",
+          "Block_colour": "#00ff00",
+          "descriptor": "A test block",
+          "Shown_element": "Test_Block"
+        },
+        {
+          "id": "A_C_E",
+          "descriptor": "Arduino equivalent",
+          "Code_Equivelant": "//Nothing here"
+        }
+      ]
+    }
+  }

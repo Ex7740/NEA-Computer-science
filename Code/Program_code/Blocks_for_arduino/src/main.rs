@@ -1,7 +1,23 @@
-use eframe::{egui};
+use std::fs;
+
+use eframe::egui;
+// use egui::epaint::tessellator::path;
 use serde::Deserialize;
 
 fn main() -> eframe::Result<()> {
+    
+    let mut files = Vec::new(); 
+
+    for entry in fs::read_dir("Json_files").unwrap() {
+
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.is_file() {
+            println!("Found JSON file: {:?}", path);
+            files.push(path);
+        }
+    }
+    
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([800.0, 600.0])
@@ -9,24 +25,27 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
 
+    
+
     eframe::run_native(
         "Blocks for arduino",
         options,
         Box::new(|_cc| {
             let mut app = BlocksForArduino::default();
+            for path in files.iter().map(|p| p.to_str().unwrap()) {
+                app.load_block_json(path);
+            }
+            println!("Loaded {} block sections", app.sections.len()
+                    
             
-            // ===== NEW =====
-            // Load block definitions from JSON
-            app.load_block_json("Json_files/test.json");
-            // ===== END NEW =====
-
+            );
             Ok(Box::new(app))
         }),
     )
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct BlockFile{
+struct BlockFile {
     block: BlockContainer,
 }
 
@@ -40,7 +59,7 @@ struct BlockSection {
     id: String,
 
     #[serde(default)]
-    Block_colour: Option<String>,    // hex color
+    Block_colour: Option<String>,
 
     #[serde(default)]
     descriptor: Option<String>,
@@ -49,131 +68,134 @@ struct BlockSection {
     Shown_element: Option<String>,
 
     #[serde(default)]
-    Code_Equivelant: Option<String>,
+    code_equivelant: Option<String>,
+
+    #[serde(skip)]
+    pos: egui::Pos2,
 }
-
-
-
 
 #[derive(Default)]
 struct BlocksForArduino {
-    // ===== NEW =====
-    sections: Vec<BlockSection>, // store parsed blocks
-    // ===== END NEW =====
+    sections: Vec<BlockSection>,
 }
 
-fn parse_hex_colour(hex: &str) -> egui::Color32{
-
-    let hex = hex.trim_start_matches("#");
+fn parse_hex_colour(hex: &str) -> egui::Color32 {
+    let hex = hex.trim_start_matches('#');
 
     if hex.len() == 6 {
         if let Ok(value) = u32::from_str_radix(hex, 16) {
-            let r = ((value >> 16) & 0xFF) as u8;
-            let g = ((value >> 8) & 0xFF) as u8;
-            let b = (value & 0xFF) as u8;
-            return egui::Color32::from_rgb(r, g, b);
+            return egui::Color32::from_rgb(
+                ((value >> 16) & 0xFF) as u8,
+                ((value >> 8) & 0xFF) as u8,
+                (value & 0xFF) as u8,
+            );
         }
     }
 
     egui::Color32::LIGHT_GRAY
-    
 }
 
 impl BlocksForArduino {
     fn load_block_json(&mut self, path: &str) {
         if let Ok(raw) = std::fs::read_to_string(path) {
-            if let Ok(file) = serde_json::from_str::<BlockFile>(&raw) {
+            match serde_json::from_str::<BlockFile>(&raw) {
+                Ok(file) => {
+                    if let Some(mut first) = file.block.sections.into_iter().next() {
+                        // position blocks vertically
+                        first.pos = egui::pos2(
+                            20.0,
+                            60.0 + self.sections.len() as f32 * 80.0,
+                        );
 
-                // ===== NEW: Load only the FIRST section =====
-                if let Some(first) = file.block.sections.into_iter().next() {
-                    self.sections = vec![first];   // store only one section
-                } else {
-                    eprintln!("JSON contains no sections");
+                        //Only adds the show section from the json file
+                        self.sections.push(first);
+                    }
                 }
-                // ===== END NEW =====
-
-            } else {
-                eprintln!("Failed to parse JSON");
+                Err(e) => eprintln!("JSON parse error in {path}: {e}"),
             }
         } else {
-            eprintln!("Failed to read {path}");
+            eprintln!("Failed to read file: {path}");
         }
     }
 }
+
+
+
 
 impl eframe::App for BlocksForArduino {
-    fn update( &mut self, _ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        
-        let screen = _ctx.screen_rect();
-        let x = 300.0;
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
 
-        let painter = _ctx.debug_painter();
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let painter = ui.painter();
+            let screen = ui.max_rect();
 
-        let block_label = egui::pos2(10.0, 10.0);
-        let code_label = egui::pos2(320.0, 10.0);
-
-        painter.text(
-            block_label,
-            egui::Align2::LEFT_TOP,
-            "Block section",
-            egui::TextStyle::Heading.resolve(&_ctx.style()),
-            _ctx.style().visuals.text_color(),
-        );        
-
-        painter.text(
-            code_label,
-            egui::Align2::LEFT_TOP,
-            "Code section",
-            egui::TextStyle::Heading.resolve(&_ctx.style()),
-            _ctx.style().visuals.text_color(),
-        );
-
-        painter.line_segment(
-            [
-                egui::pos2(x, screen.top()),
-                egui::pos2(x, screen.bottom()),
-            ],
-
-            egui::Stroke {
-                width: 1.0,
-                color: _ctx.style().visuals.widgets.noninteractive.bg_stroke.color,
-            }
-        );
-        let mut y_offset = 60.0;
-
-        for sec in &self.sections {
-
-            // Text on the block (Shown_element or fallback to id)
-            let label = sec.Shown_element.clone().unwrap_or(sec.id.clone());
-
-            // Block color
-            let color = sec
-                .Block_colour
-                .as_ref()
-                .map(|s| parse_hex_colour(s))
-                .unwrap_or(egui::Color32::from_rgb(80, 160, 240));
-
-            // Block rectangle
-            painter.rect_filled(
-                egui::Rect::from_min_size(
-                    egui::pos2(20.0, y_offset),
-                    egui::vec2(100.0, 100.0),
-                ),
-                6.0,
-                color,
-            );
-
-            // Block text
+            // Titles
             painter.text(
-                egui::pos2(30.0, y_offset + 15.0),
+                egui::pos2(10.0, 10.0),
                 egui::Align2::LEFT_TOP,
-                label,
-                egui::TextStyle::Body.resolve(&_ctx.style()),
-                _ctx.style().visuals.text_color(),
+                "Block section",
+                egui::TextStyle::Heading.resolve(ui.style()),
+                ui.style().visuals.text_color(),
             );
 
-            y_offset += 70.0; // move down for next block
-        }
+            painter.text(
+                egui::pos2(320.0, 10.0),
+                egui::Align2::LEFT_TOP,
+                "Code section",
+                egui::TextStyle::Heading.resolve(ui.style()),
+                ui.style().visuals.text_color(),
+            );
+
+            // Divider
+            painter.line_segment(
+                [
+                    egui::pos2(300.0, screen.top()),
+                    egui::pos2(300.0, screen.bottom()),
+                ],
+                egui::Stroke::new(
+                    1.0,
+                    ui.style().visuals.widgets.noninteractive.bg_stroke.color,
+                ),
+            );
+
+            for sec in &mut self.sections {
+                let size = egui::vec2(120.0, 60.0);
+                let rect = egui::Rect::from_min_size(sec.pos, size);
+            
+                // 1️⃣ Interaction FIRST (mutable borrow)
+                let response = ui.allocate_rect(
+                    rect,
+                    egui::Sense::click_and_drag(),
+                );
+            
+                if response.dragged() {
+                    sec.pos += response.drag_delta();
+                }
+            
+                // 2️⃣ Painting AFTER (immutable borrow)
+                let painter = ui.painter();
+            
+                let color = sec
+                    .Block_colour
+                    .as_ref()
+                    .map(|c| parse_hex_colour(c))
+                    .unwrap_or(egui::Color32::from_rgb(80, 160, 240));
+            
+                painter.rect_filled(rect, 6.0, color);
+            
+                let label = sec
+                    .Shown_element
+                    .clone()
+                    .unwrap_or_else(|| sec.id.clone());
+            
+                painter.text(
+                    sec.pos + egui::vec2(10.0, 10.0),
+                    egui::Align2::LEFT_TOP,
+                    label,
+                    egui::TextStyle::Body.resolve(ui.style()),
+                    ui.style().visuals.text_color(),
+                );
+            }
+        });
     }
 }
-
