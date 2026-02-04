@@ -1,3 +1,0 @@
-1. Radio mesh (see google drive)
-2. Room visualiser using self driving robot
-3. Screen to show qr code that links to a webpage of your choice

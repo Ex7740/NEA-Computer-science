@@ -1,1 +1,0 @@
-# This is the writeup of the project
