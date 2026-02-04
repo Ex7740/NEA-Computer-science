@@ -1,0 +1,17 @@
+{
+    "block": {
+      "sections": [
+        {
+          "id": "Show",
+          "Block_colour": "#00ff00",
+          "descriptor": "Which pin to set to an I/O",
+          "Shown_element": "PinMode({}, OUTPUT)"
+        },
+        {
+          "id": "A_C_E",
+          "descriptor": "Arduino equivalent",
+          "Code_Equivelant": "pinMode({pin}, OUTPUT),"
+        }
+      ]
+    }
+  }
