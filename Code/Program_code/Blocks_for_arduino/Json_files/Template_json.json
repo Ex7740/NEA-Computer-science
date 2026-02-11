@@ -1,0 +1,22 @@
+{
+    "block": {
+        "sections":[
+            {
+                "id": "Show",
+                "Block_colour": "//This is the colour of the block in the UI, it can be any hex code",
+                "descriptor": "//This is a description of the block, it will be shown in the UI when the user hovers over the block",
+                "Shown_element": "Test({input})",
+                "inputs": [
+                    {
+                      "name": "Test Input"
+                    }
+                  ]
+            },
+            {
+                "id": "A_C_E",
+                "descriptor": "//This is a description of the code equivalent, it will be shown in the UI when the user hovers over the code equivalent",
+                "Code_Equivelant": "//This is the code equivalent of the block, it can contain placeholders for the inputs, for example delay({time});"
+            }
+        ]       
+    }
+}

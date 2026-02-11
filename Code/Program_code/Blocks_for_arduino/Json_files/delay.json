@@ -1,0 +1,18 @@
+{
+    "block": {
+      "sections": [
+        {
+          "id": "Show",
+          "Block_colour": "#ff00ff",
+          "descriptor": "Delay for a set amount of time",
+          "Shown_element": "Delay({time}ms)"
+          
+        },
+        {
+          "id": "A_C_E",
+          "descriptor": "Arduino equivalent",
+          "Code_Equivelant": "delay({time});"
+        }
+      ]
+    }
+}

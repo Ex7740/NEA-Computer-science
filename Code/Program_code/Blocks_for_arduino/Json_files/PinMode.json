@@ -5,7 +5,12 @@
           "id": "Show",
           "Block_colour": "#00ff00",
           "descriptor": "Which pin to set to an I/O",
-          "Shown_element": "PinMode({}, OUTPUT)"
+          "Shown_element": "PinMode({}, OUTPUT)",
+          "inputs": [
+            {
+              "name": "Pin"
+            }
+          ]
         },
         {
           "id": "A_C_E",

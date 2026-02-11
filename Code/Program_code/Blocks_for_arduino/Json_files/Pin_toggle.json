@@ -1,17 +1,21 @@
 {
-    "block": {
-      "sections": [
-        {
-          "id": "Show",
-          "Block_colour": "#0000ff",
-          "descriptor": "A test block",
-          "Shown_element": "Toggle Pin"
-        },
-        {
-          "id": "A_C_E",
-          "descriptor": "Arduino equivalent",
-          "Code_Equivelant": "digitalWrite({pin}, HIGH); delay(1000); digitalWrite({pin}, LOW); delay(1000);"
-        }
-      ]
-    }
+  "block": {
+    "sections": [
+      {
+        "id": "Show",
+        "Block_colour": "#0000ff",
+        "descriptor": "A test block",
+        "Shown_element": "Toggle Pin",
+        "inputs": [
+          { "name": "Pin" },
+          { "name": "State" }
+        ]
+      },
+      {
+        "id": "A_C_E",
+        "descriptor": "Arduino equivalent",
+        "Code_Equivelant": "digitalWrite({pin}, {state});"
+      }
+    ]
   }
+}
