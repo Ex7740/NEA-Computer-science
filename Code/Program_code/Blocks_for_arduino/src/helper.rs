@@ -1,5 +1,6 @@
 use eframe::egui;
 
+
 pub fn parse_hex_colour(hex: &str) -> egui::Color32 {
     let hex = hex.trim_start_matches('#');
 

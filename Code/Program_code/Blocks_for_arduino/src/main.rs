@@ -35,6 +35,8 @@ fn main() -> eframe::Result<()> {
                 app.load_block_json(path);
             }
 
+            app.sync_valid_sequences_with_loaded_blocks();
+
             Ok(Box::new(app))
         }),
     )

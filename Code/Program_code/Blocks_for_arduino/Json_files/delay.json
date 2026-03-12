@@ -1,12 +1,16 @@
 {
+  "unique_id": "delay",
     "block": {
       "sections": [
         {
           "id": "Show",
+          "unique_id": "delay",
           "Block_colour": "#ff00ff",
           "descriptor": "Delay for a set amount of time",
-          "Shown_element": "Delay({time}ms)"
-          
+          "Shown_element": "Delay({time}ms)",
+          "inputs": [
+            { "name": "time", "validation": "positive_integer" }
+          ]
         },
         {
           "id": "A_C_E",

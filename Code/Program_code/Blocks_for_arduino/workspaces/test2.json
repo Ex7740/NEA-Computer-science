@@ -1,0 +1,16 @@
+{
+  "name": "test2",
+  "blocks": [
+    {
+      "unique_id": "Pin_toggle",
+      "pos_x": 416.0,
+      "pos_y": 128.0,
+      "input_values": {
+        "Pin": "12",
+        "State": "High"
+      },
+      "instance_id": "060db251-517f-4c08-a819-a0ec9cacba46",
+      "attached_to_instance_id": null
+    }
+  ]
+}

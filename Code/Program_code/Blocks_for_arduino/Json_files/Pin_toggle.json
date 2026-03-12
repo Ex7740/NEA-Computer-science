@@ -1,14 +1,16 @@
 {
+  "unique_id": "Pin_toggle",
   "block": {
     "sections": [
       {
         "id": "Show",
+        "unique_id": "Pin_toggle",
         "Block_colour": "#0000ff",
         "descriptor": "A test block",
         "Shown_element": "Toggle Pin",
         "inputs": [
-          { "name": "Pin" },
-          { "name": "State" }
+          { "name": "Pin",   "validation": "arduino_pin" },
+          { "name": "State", "validation": "arduino_state" }
         ]
       },
       {

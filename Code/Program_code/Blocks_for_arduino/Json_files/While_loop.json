@@ -1,8 +1,10 @@
 {
+  "unique_id": "While_loop",
     "block": {
       "sections": [
         {
           "id": "Show",
+          "unique_id": "While_loop",
           "Block_colour": "#ff0000",
           "descriptor": "While loop",
           "Shown_element": "While {}",

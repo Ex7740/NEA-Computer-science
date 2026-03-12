@@ -1,15 +1,15 @@
 {
+  "unique_id": "PinMode",
     "block": {
       "sections": [
         {
           "id": "Show",
+          "unique_id": "PinMode",
           "Block_colour": "#00ff00",
           "descriptor": "Which pin to set to an I/O",
           "Shown_element": "PinMode({}, OUTPUT)",
           "inputs": [
-            {
-              "name": "Pin"
-            }
+            { "name": "Pin", "validation": "arduino_pin" }
           ]
         },
         {
