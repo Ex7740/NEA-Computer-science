@@ -1,31 +1,63 @@
+// Main application logic for Blocks for Arduino
+// This file contains the core state management, block manipulation, validation, 
+// workspace persistence, and UI rendering for the visual block-based Arduino code editor.
+
 use crate::helper::*;
 use crate::model::*;
 use eframe::egui;
 use std::collections::{HashMap, HashSet};
 
-const GLOBAL_X: f32 = 140.0;
-const GLOBAL_Y: f32 = 90.0;
+// UI Layout Constants
+const GLOBAL_X: f32 = 140.0;           // Block width in pixels
+const GLOBAL_Y: f32 = 90.0;            // Block height in pixels
 const VALID_SEQUENCES_PATH: &str = "Valid_sequences.txt";
-const BLOCKS_START_Y: f32 = 120.0;
-const PALETTE_BLOCK_GAP: f32 = 10.0;
-const MAX_SEQUENCE_BLOCKS_FOR_GENERATION: usize = 7;
+const INO_OUTPUT_DIR: &str = "INO";
+const BLOCKS_START_Y: f32 = 120.0;     // Y-position where blocks start rendering
+const PALETTE_BLOCK_GAP: f32 = 10.0;   // Vertical gap between palette blocks
+const MAX_SEQUENCE_BLOCKS_FOR_GENERATION: usize = 7; // Max blocks to use in sequence generation
 
+/// Main application state for the Blocks for Arduino editor.
+/// 
+/// Manages all blocks (both palette templates and code instances), block connections,
+/// user interactions, validation, and workspace management. The application uses a
+/// tree structure where blocks can be attached as children to form executable sequences.
 pub struct BlocksForArduino {
+    /// All blocks in the editor (both palette and code blocks)
     pub sections: Vec<BlockSection>,
+    
+    /// Tracks whether mouse was pressed in previous frame (for detecting releases)
     pub was_mouse_down: bool,
+    
+    /// Current top-level block connections (can be Single or Group)
     pub current_blocks: Vec<BlockListEntry>,
+    
+    /// Status message displayed in the toolbar
     pub status_message: String,
+    
+    /// Valid block sequences loaded from Valid_sequences.txt
     pub valid_sequences: Vec<Vec<String>>,
+    
+    /// Popup state for sequence validation suggestions
     pub show_sequence_popup: bool,
     pub sequence_popup_text: String,
+    
+    /// Popup state for input validation errors
     pub show_validation_popup: bool,
     pub validation_popup_text: String,
-    // workspace management
+    
+    // Workspace management
+    /// Name of the currently open workspace
     pub workspace_name: String,
+    
+    /// State for Open Workspace dialog
     pub show_open_dialog: bool,
     pub available_workspaces: Vec<String>,
+    
+    /// State for Save As dialog
     pub show_save_as_dialog: bool,
     pub save_as_name_input: String,
+    
+    /// Scroll position for palette blocks (left side)
     pub palette_scroll_offset: f32,
 }
 
@@ -53,10 +85,12 @@ impl Default for BlocksForArduino {
 
 /* ---------- APP LOGIC ---------- */
 impl BlocksForArduino {
+    /// Generates a unique instance identifier using UUID v4
     fn new_instance_id() -> String {
         uuid::Uuid::new_v4().to_string()
     }
 
+    /// Gets the unique_id for a block, falling back to id if unique_id is not set
     fn block_unique_id(&self, idx: usize) -> String {
         self.sections[idx]
             .unique_id
@@ -64,10 +98,12 @@ impl BlocksForArduino {
             .unwrap_or_else(|| self.sections[idx].id.clone())
     }
 
+    /// Counts the number of code blocks (excludes palette blocks)
     fn code_block_count(&self) -> usize {
         self.sections.iter().filter(|block| !block.is_palette).count()
     }
 
+    /// Creates an empty HashMap of input values based on the block's input definitions
     fn build_input_values(block: &BlockSection) -> HashMap<String, String> {
         let mut values = HashMap::new();
         for input in &block.inputs {
@@ -76,6 +112,8 @@ impl BlocksForArduino {
         values
     }
 
+    /// Initializes all runtime-only fields on a block (position, connections, input values, etc.)
+    /// This is called when creating new blocks or loading from snapshots.
     fn initialise_runtime_fields(block: &mut BlockSection, pos: egui::Pos2, is_palette: bool) {
         block.pos = pos;
         block.attached_to = None;
@@ -85,6 +123,11 @@ impl BlocksForArduino {
         block.is_palette = is_palette;
     }
 
+    /// Loads a block definition from a JSON file and adds it to the palette.
+    /// 
+    /// The JSON file should contain a "block" key with "sections" containing block definitions.
+    /// Only the first "show" section or the section with shown_element is displayed in the palette.
+    /// Looks for an "A_C_E" section to extract the code template.
     pub fn load_block_json(&mut self, path: &str) {
         let raw = match std::fs::read_to_string(path) {
             Ok(r) => r,
@@ -102,8 +145,29 @@ impl BlocksForArduino {
             }
         };
 
-        let mut block = match file.block.sections.into_iter().next() {
-            Some(b) => b,
+        let mut sections = file.block.sections.into_iter();
+
+        let mut show_section = None;
+        let mut ace_template = None;
+
+        for section in sections.by_ref() {
+            let section_id = section.id.to_ascii_lowercase();
+            if section_id == "show" || section.shown_element.is_some() {
+                if show_section.is_none() {
+                    show_section = Some(section.clone());
+                }
+            }
+
+            if section_id == "a_c_e" {
+                ace_template = section.code_equivelant.clone();
+            }
+        }
+
+        let mut block = match show_section {
+            Some(mut b) => {
+                b.code_equivelant = ace_template;
+                b
+            }
             None => return,
         };
 
@@ -143,6 +207,8 @@ impl BlocksForArduino {
         ids
     }
 
+    /// Recursively generates all possible permutations of block sequences up to MAX_SEQUENCE_BLOCKS_FOR_GENERATION
+    /// Used for validating block connection orders
     fn generate_sequences_recursive(
         block_ids: &[String],
         used: &mut [bool],
@@ -163,6 +229,8 @@ impl BlocksForArduino {
         }
     }
 
+    /// Generates all valid block sequence permutations from available palette blocks
+    /// Useful for initial setup and validation of block order constraints
     fn generate_valid_sequences_from_blocks(block_ids: &[String]) -> Vec<Vec<String>> {
         if block_ids.is_empty() {
             return Vec::new();
@@ -198,6 +266,8 @@ impl BlocksForArduino {
         }
     }
 
+    /// Creates a new code block instance from a palette block.
+    /// The new block is positioned offset from existing code blocks.
     pub fn spawn_code_block(&mut self, source: usize) {
         let mut new_block = self.sections[source].clone();
         let offset = self.code_block_count() as f32 * 15.0;
@@ -211,6 +281,8 @@ impl BlocksForArduino {
         self.refresh_current_blocks();
     }
 
+    /// Detaches a block from its parent, removing it from the parent's children list.
+    /// Used when the user drags a block away or before deletion.
     fn detach_block(&mut self, idx: usize) {
         if let Some(parent) = self.sections[idx].attached_to.take() {
             self.sections[parent].children.retain(|&child| child != idx);
@@ -218,6 +290,8 @@ impl BlocksForArduino {
         }
     }
 
+    /// Attempts to snap a block to a parent if it's positioned within snap distance.
+    /// Searches for compatible parents and establishes parent-child connection if appropriate.
     fn try_snap(&mut self, idx: usize) {
         let size = egui::vec2(GLOBAL_X, GLOBAL_Y);
         let snap = 12.0;
@@ -249,6 +323,8 @@ impl BlocksForArduino {
         }
     }
 
+    /// Repositions all child blocks in a vertical line below their parent.
+    /// Called after parent block is moved to maintain proper child alignment.
     fn move_children(&mut self, parent: usize) {
         let size = egui::vec2(GLOBAL_X, GLOBAL_Y);
         let base = self.sections[parent].pos;
@@ -267,6 +343,8 @@ impl BlocksForArduino {
         }
     }
 
+    /// Recursively collects all descendants (children, grandchildren, etc.) of a block
+    /// as a flat list of indices. Used for deletion and serialization.
     fn collect_descendants(&self, idx: usize, out: &mut Vec<usize>) {
         out.push(idx);
         for &child in &self.sections[idx].children {
@@ -274,6 +352,8 @@ impl BlocksForArduino {
         }
     }
 
+    /// Recursively collects the unique IDs of a block and all its connected descendants
+    /// Used to build the current block sequence representation.
     fn collect_connected_unique_ids(&self, idx: usize, out: &mut Vec<String>) {
         out.push(self.block_unique_id(idx));
         for &child in &self.sections[idx].children {
@@ -305,10 +385,13 @@ impl BlocksForArduino {
             .collect()
     }
 
+    /// Converts the current blocks to a JSON string representation for display/debugging
     fn current_blocks_json(&self) -> String {
         serde_json::to_string(&self.current_blocks).unwrap_or_else(|_| "[]".to_string())
     }
 
+    /// Loads valid block sequences from the specified JSON file.
+    /// Returns empty Vec if file is missing or contains invalid JSON.
     fn load_valid_sequences(path: &str) -> Vec<Vec<String>> {
         let raw = match std::fs::read_to_string(path) {
             Ok(raw) => raw,
@@ -327,6 +410,8 @@ impl BlocksForArduino {
         }
     }
 
+    /// Converts current block connections into a flat list of sequences.
+    /// Each sequence is either a single block or a group of connected blocks.
     fn flatten_current_sequences(&self) -> Vec<Vec<String>> {
         self.current_blocks
             .iter()
@@ -337,6 +422,8 @@ impl BlocksForArduino {
             .collect()
     }
 
+    /// Calculates the edit distance (Levenshtein-like) between two block sequences.
+    /// Used for suggesting corrections when validation fails.
     fn sequence_distance(a: &[String], b: &[String]) -> usize {
         let min_len = a.len().min(b.len());
         let mut distance = a.len().abs_diff(b.len());
@@ -348,6 +435,7 @@ impl BlocksForArduino {
         distance
     }
 
+    /// Gathers all available block IDs (both palette and code blocks)
     fn available_block_ids(&self) -> HashSet<String> {
         self.sections
             .iter()
@@ -361,6 +449,7 @@ impl BlocksForArduino {
             .collect()
     }
 
+    /// Filters valid sequences to only include those where all blocks are available
     fn valid_sequences_for_blocks<'a>(
         &'a self,
         available_blocks: &HashSet<String>,
@@ -375,6 +464,7 @@ impl BlocksForArduino {
             .collect()
     }
 
+    /// Suggests the closest valid sequence to the current one using sequence distance
     fn suggest_sequence(sequence: &[String], candidates: &[&Vec<String>]) -> Option<Vec<String>> {
         candidates
             .iter()
@@ -382,10 +472,13 @@ impl BlocksForArduino {
             .map(|candidate| (*candidate).clone())
     }
 
+    /// Formats a sequence into a readable string like "Block1 -> Block2 -> Block3"
     fn join_sequence(sequence: &[String]) -> String {
         sequence.join(" -> ")
     }
 
+    /// Validates that the current block sequence matches one of the valid sequences.
+    /// Returns detailed error messages with suggestions if validation fails.
     fn validate_current_sequences(&self) -> Result<(), String> {
         if self.valid_sequences.is_empty() {
             return Err(format!(
@@ -492,6 +585,21 @@ impl BlocksForArduino {
                 }
                 Ok(_) => {}
             },
+            "arduino_condition" => {
+                if trimmed.eq_ignore_ascii_case("true") && trimmed != "true" {
+                    return Err(format!(
+                        "'{field_name}' uses '{trimmed}', but Arduino boolean literals are lowercase.\n\
+                         Suggested: use true (lowercase)."
+                    ));
+                }
+
+                if trimmed.eq_ignore_ascii_case("false") && trimmed != "false" {
+                    return Err(format!(
+                        "'{field_name}' uses '{trimmed}', but Arduino boolean literals are lowercase.\n\
+                         Suggested: use false (lowercase)."
+                    ));
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -527,11 +635,353 @@ impl BlocksForArduino {
         Ok(())
     }
 
+    /// Validates that all blocks use the same Pin value (if they have one)
+    /// Prevents mixing of pins across different code blocks
+    fn validate_pin_consistency(&self) -> Result<(), String> {
+        let mut expected_pin: Option<String> = None;
+        let mut pin_sources: Vec<String> = Vec::new();
+
+        for block in self.sections.iter().filter(|b| !b.is_palette) {
+            let pin_value = Self::resolve_input_value(&block.input_values, "Pin")
+                .map(|v| v.trim())
+                .filter(|v| !v.is_empty());
+
+            let Some(pin) = pin_value else {
+                continue;
+            };
+
+            let block_name = block.unique_id.as_deref().unwrap_or(&block.id);
+            pin_sources.push(format!("{} -> {}", block_name, pin));
+
+            if let Some(ref expected) = expected_pin {
+                if !expected.eq_ignore_ascii_case(pin) {
+                    return Err(format!(
+                        "Pin mismatch detected across code blocks.\nAll blocks with a Pin field must use the same value.\nFound: {}\nExpected (first value): {}\nDetails:\n{}",
+                        pin,
+                        expected,
+                        pin_sources.join("\n")
+                    ));
+                }
+            } else {
+                expected_pin = Some(pin.to_string());
+            }
+        }
+
+        Ok(())
+    }
+
+    fn root_block_indices(&self) -> Vec<usize> {
+        let mut roots: Vec<usize> = self
+            .sections
+            .iter()
+            .enumerate()
+            .filter(|(_, block)| !block.is_palette && block.attached_to.is_none())
+            .map(|(idx, _)| idx)
+            .collect();
+
+        roots.sort_by(|a, b| {
+            self.sections[*a]
+                .pos
+                .y
+                .total_cmp(&self.sections[*b].pos.y)
+                .then_with(|| self.sections[*a].pos.x.total_cmp(&self.sections[*b].pos.x))
+        });
+
+        roots
+    }
+
+    /// Gets all child block indices sorted by position (top-to-bottom, left-to-right)
+    fn sorted_child_indices(&self, idx: usize) -> Vec<usize> {
+        let mut children = self.sections[idx].children.clone();
+        children.sort_by(|a, b| {
+            self.sections[*a]
+                .pos
+                .y
+                .total_cmp(&self.sections[*b].pos.y)
+                .then_with(|| self.sections[*a].pos.x.total_cmp(&self.sections[*b].pos.x))
+        });
+        children
+    }
+
+    /// Indents a line of code by the specified number of levels (2 spaces per level)
+    /// Empty lines are returned unchanged
+    fn indent_line(line: &str, level: usize) -> String {
+        if line.trim().is_empty() {
+            return String::new();
+        }
+
+        let mut out = String::new();
+        out.push_str(&"  ".repeat(level));
+        out.push_str(line);
+        out
+    }
+
+    /// Recursively renders a block and its children to Arduino code.
+    /// Handles template substitution, indentation, and brace nesting for control structures.
+    fn render_block_recursive(
+        &self,
+        idx: usize,
+        indent_level: usize,
+        out: &mut Vec<String>,
+    ) -> Result<(), String> {
+        let block = &self.sections[idx];
+        let block_name = block.unique_id.as_deref().unwrap_or(&block.id);
+        let template = block.code_equivelant.as_deref().ok_or_else(|| {
+            format!(
+                "Block '{}' does not define an A_C_E Code_Equivelant template.",
+                block_name
+            )
+        })?;
+
+        let (resolved, missing) = Self::fill_template_with_inputs(template, block);
+        if !missing.is_empty() {
+            return Err(format!(
+                "Block '{}' is missing values for placeholders: {}.",
+                block_name,
+                missing.join(", ")
+            ));
+        }
+
+        let template_lines: Vec<String> = resolved.lines().map(|line| line.trim_end().to_string()).collect();
+        let children = self.sorted_child_indices(idx);
+        let close_idx = template_lines.iter().rposition(|line| line.trim() == "}");
+        let has_open_brace = template_lines.iter().any(|line| line.contains('{'));
+
+        // For blocks with braces (like if/loop), insert children inside the braces
+        if !children.is_empty() && has_open_brace {
+            if let Some(close_idx) = close_idx {
+                for line in template_lines.iter().take(close_idx) {
+                    out.push(Self::indent_line(line, indent_level));
+                }
+
+                for child in children {
+                    self.render_block_recursive(child, indent_level + 1, out)?;
+                }
+
+                for line in template_lines.iter().skip(close_idx) {
+                    out.push(Self::indent_line(line, indent_level));
+                }
+
+                return Ok(());
+            }
+        }
+
+        for line in &template_lines {
+            out.push(Self::indent_line(line, indent_level));
+        }
+
+        for child in children {
+            self.render_block_recursive(child, indent_level, out)?;
+        }
+
+        Ok(())
+    }
+
+    /// Looks up an input value case-insensitively (first exact match, then case-insensitive match)
+    fn resolve_input_value<'a>(
+        input_values: &'a HashMap<String, String>,
+        key: &str,
+    ) -> Option<&'a str> {
+        if let Some(value) = input_values.get(key) {
+            return Some(value.as_str());
+        }
+
+        let lower_key = key.to_ascii_lowercase();
+        input_values
+            .iter()
+            .find(|(candidate, _)| candidate.to_ascii_lowercase() == lower_key)
+            .map(|(_, value)| value.as_str())
+    }
+
+    /// Checks if a string is a valid placeholder token (alphanumeric + underscore + spaces)
+    fn is_placeholder_token(token: &str) -> bool {
+        !token.is_empty()
+            && !token.contains('\n')
+            && !token.contains('\r')
+            && token
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ' ')
+    }
+
+    /// Normalizes input values according to validation rules
+    /// (e.g., converts HIGH/1 to 1 for arduino_state validation)
+    fn normalize_value_for_rule(value: &str, rule: Option<&str>) -> String {
+        match rule {
+            Some("arduino_state") => {
+                let upper = value.trim().to_ascii_uppercase();
+                match upper.as_str() {
+                    "HIGH" | "1" => "1".to_string(),
+                    "LOW" | "0" => "0".to_string(),
+                    _ => value.trim().to_string(),
+                }
+            }
+            _ => value.trim().to_string(),
+        }
+    }
+
+    /// Finds the input definition for a key (case-insensitive)
+    fn resolve_input_definition<'a>(block: &'a BlockSection, key: &str) -> Option<&'a InputDefinition> {
+        let lower_key = key.to_ascii_lowercase();
+        block
+            .inputs
+            .iter()
+            .find(|candidate| candidate.name.to_ascii_lowercase() == lower_key)
+    }
+
+    /// Substitutes placeholder values in a code template.
+    /// Placeholders are marked with curly braces like {variable_name}.
+    /// Returns the filled template and a list of any missing placeholders.
+    fn fill_template_with_inputs(
+        template: &str,
+        block: &BlockSection,
+    ) -> (String, Vec<String>) {
+        let mut out = String::with_capacity(template.len());
+        let mut missing = Vec::new();
+        let mut cursor = 0usize;
+
+        while cursor < template.len() {
+            let Some(rel_open) = template[cursor..].find('{') else {
+                out.push_str(&template[cursor..]);
+                break;
+            };
+
+            let open_idx = cursor + rel_open;
+            let after_open = open_idx + 1;
+
+            out.push_str(&template[cursor..open_idx]);
+
+            let Some(rel_close) = template[after_open..].find('}') else {
+                out.push('{');
+                cursor = after_open;
+                continue;
+            };
+
+            let close_idx = after_open + rel_close;
+            let raw_key = &template[after_open..close_idx];
+            let key = raw_key.trim();
+
+            if Self::is_placeholder_token(key) {
+                if let Some(value) = Self::resolve_input_value(&block.input_values, key) {
+                    let rule = Self::resolve_input_definition(block, key)
+                        .and_then(|input| input.validation.as_deref());
+                    out.push_str(&Self::normalize_value_for_rule(value, rule));
+                } else {
+                    missing.push(key.to_string());
+                    out.push('{');
+                    out.push_str(raw_key);
+                    out.push('}');
+                }
+                cursor = close_idx + 1;
+            } else {
+                out.push('{');
+                cursor = after_open;
+            }
+        }
+
+        (out, missing)
+    }
+
+    /// Generates code lines from all root blocks to be placed in the loop() function
+    fn render_ino_loop_lines(&self) -> Result<Vec<String>, String> {
+        let roots = self.root_block_indices();
+        if roots.is_empty() {
+            return Err("No code blocks in workspace. Add blocks to generate an .ino file.".to_string());
+        }
+
+        let mut lines = Vec::new();
+
+        for root in roots {
+            self.render_block_recursive(root, 0, &mut lines)?;
+        }
+
+        Ok(lines)
+    }
+
+    /// Checks if a line is a pinMode() call, which should be in the setup() method
+    fn is_setup_line(line: &str) -> bool {
+        line.trim_start().to_ascii_lowercase().starts_with("pinmode(")
+    }
+
+    /// Generates the complete Arduino .ino source code from the current blocks.
+    /// Separates pinMode() calls into setup() and other code into loop().
+    fn build_ino_source(&self) -> Result<String, String> {
+        let generated_lines = self.render_ino_loop_lines()?;
+        let mut setup_lines = Vec::new();
+        let mut loop_lines = Vec::new();
+
+        for line in generated_lines {
+            if Self::is_setup_line(&line) {
+                setup_lines.push(line);
+            } else {
+                loop_lines.push(line);
+            }
+        }
+
+        let mut src = String::new();
+        src.push_str("void setup() {\n");
+        for line in setup_lines {
+            if line.trim().is_empty() {
+                src.push('\n');
+            } else {
+                src.push_str("  ");
+                src.push_str(&line);
+                src.push('\n');
+            }
+        }
+        src.push_str("}\n\n");
+        src.push_str("void loop() {\n");
+
+        for line in loop_lines {
+            if line.trim().is_empty() {
+                src.push('\n');
+            } else {
+                src.push_str("  ");
+                src.push_str(&line);
+                src.push('\n');
+            }
+        }
+
+        src.push_str("}\n");
+        Ok(src)
+    }
+
+    /// Exports the current workspace as an Arduino .ino file.
+    /// Creates a directory structure and saves the generated code.
+    /// Returns the path where the file was written.
+    fn export_ino(&self) -> Result<std::path::PathBuf, String> {
+        let file_stem = if self.workspace_name.trim().is_empty() {
+            "Untitled".to_string()
+        } else {
+            let safe = Self::safe_filename(&self.workspace_name);
+            if safe.is_empty() {
+                "Untitled".to_string()
+            } else {
+                safe
+            }
+        };
+
+        let workspace_dir = std::path::Path::new(INO_OUTPUT_DIR).join(&file_stem);
+        std::fs::create_dir_all(&workspace_dir)
+            .map_err(|e| format!("Could not create {}: {e}", workspace_dir.display()))?;
+
+        let path = workspace_dir.join(format!("{}.ino", file_stem));
+        let source = self.build_ino_source()?;
+
+        std::fs::write(&path, source)
+            .map_err(|e| format!("Could not write {}: {e}", path.display()))?;
+
+        Ok(path)
+    }
+
+    /// Rebuilds the current_blocks list from the block tree structure.
+    /// Called whenever the block tree changes (attach, detach, delete).
     fn refresh_current_blocks(&mut self) {
         self.current_blocks = self.build_current_blocks();
         println!("Current blocks: {}", self.current_blocks_json());
     }
 
+    /// Deletes a block and all its children from the workspace.
+    /// Automatically updates parent-child connections for remaining blocks.
     fn delete_block(&mut self, idx: usize) {
         self.detach_block(idx);
 
@@ -572,7 +1022,8 @@ impl BlocksForArduino {
 const WORKSPACES_DIR: &str = "workspaces";
 
 impl BlocksForArduino {
-    /// Returns a safe filesystem stem from an arbitrary user-supplied name.
+    /// Returns a safe filesystem filename from an arbitrary user-supplied name.
+    /// Only allows alphanumeric characters, spaces, hyphens, and underscores.
     fn safe_filename(name: &str) -> String {
         let stem: String = name
             .chars()
@@ -581,10 +1032,12 @@ impl BlocksForArduino {
         stem.trim().to_string()
     }
 
+    /// Constructs the filesystem path for a workspace file
     fn workspace_path(name: &str) -> std::path::PathBuf {
         std::path::Path::new(WORKSPACES_DIR).join(format!("{}.json", Self::safe_filename(name)))
     }
 
+    /// Lists all available workspaces saved in the workspaces directory
     pub fn list_workspaces() -> Vec<String> {
         let mut names = Vec::new();
         if let Ok(entries) = std::fs::read_dir(WORKSPACES_DIR) {
@@ -601,6 +1054,8 @@ impl BlocksForArduino {
         names
     }
 
+    /// Saves the current workspace (including all code blocks but not palette blocks) to a JSON file.
+    /// Creates the workspaces directory if it doesn't exist.
     pub fn save_workspace(&self, name: &str) -> Result<(), String> {
         let safe = Self::safe_filename(name);
         if safe.is_empty() {
@@ -609,6 +1064,7 @@ impl BlocksForArduino {
         std::fs::create_dir_all(WORKSPACES_DIR)
             .map_err(|e| format!("Could not create workspaces directory: {e}"))?;
 
+        // Snapshot only the code blocks (not palette blocks)
         let blocks: Vec<BlockSnapshot> = self
             .sections
             .iter()
@@ -639,6 +1095,8 @@ impl BlocksForArduino {
         Ok(())
     }
 
+    /// Loads a saved workspace by name, restor all code blocks and their connections.
+    /// Requires that all referenced block types are already loaded as palette blocks.
     pub fn load_workspace_by_name(&mut self, name: &str) -> Result<(), String> {
         let path = Self::workspace_path(name);
         let json = std::fs::read_to_string(&path)
@@ -708,6 +1166,8 @@ impl BlocksForArduino {
         Ok(())
     }
 
+    /// Closes the current workspace by removing all code blocks and clearing the workspace name.
+    /// Palette blocks remain intact for creating new workspaces.
     pub fn close_workspace(&mut self) {
         self.sections.retain(|b| b.is_palette);
         for b in &mut self.sections {
@@ -721,7 +1181,10 @@ impl BlocksForArduino {
 }
 
 /* ---------- UI ---------- */
+
+/// Implementation of the egui App trait for rendering and handling the UI
 impl eframe::App for BlocksForArduino {
+    /// Main update loop called every frame - handles rendering and user input
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let mouse_down = ctx.input(|i| i.pointer.primary_down());
         let mouse_released = self.was_mouse_down && !mouse_down;
@@ -729,9 +1192,10 @@ impl eframe::App for BlocksForArduino {
 
         let mut delete_request: Option<usize> = None;
 
+        // --- TOP TOOLBAR PANEL ---
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                // --- Workspace controls ---
+                // Workspace controls
                 if ui.button("New").clicked() {
                     self.close_workspace();
                 }
@@ -788,34 +1252,75 @@ impl eframe::App for BlocksForArduino {
                             self.show_validation_popup = true;
                         }
                         Ok(()) => {
-                            // Step 2 – validate block-order sequences
-                            if self.current_blocks.is_empty() {
-                                self.status_message =
-                                    "No code-block connections found".to_string();
-                            } else {
-                                match self.validate_current_sequences() {
-                                    Ok(()) => {
-                                        let current_blocks = self.current_blocks_json();
-                                        self.status_message = format!(
-                                            "Connected blocks are valid: {}",
-                                            current_blocks
-                                        );
-                                        println!(
-                                            "Connected blocks are valid: {}",
-                                            current_blocks
-                                        );
-                                        self.show_sequence_popup = false;
-                                        self.sequence_popup_text.clear();
-                                    }
-                                    Err(message) => {
+                            // Step 2 – validate cross-block pin consistency
+                            match self.validate_pin_consistency() {
+                                Err(message) => {
+                                    self.status_message =
+                                        "Pin mismatch detected.".to_string();
+                                    self.validation_popup_text = message;
+                                    self.show_validation_popup = true;
+                                }
+                                Ok(()) => {
+                                    // Step 3 – validate block-order sequences
+                                    if self.current_blocks.is_empty() {
                                         self.status_message =
-                                            "Invalid block order detected".to_string();
-                                        self.sequence_popup_text = message;
-                                        self.show_sequence_popup = true;
+                                            "No code-block connections found".to_string();
+                                    } else {
+                                        match self.validate_current_sequences() {
+                                            Ok(()) => {
+                                                let current_blocks = self.current_blocks_json();
+                                                self.status_message = format!(
+                                                    "Connected blocks are valid: {}",
+                                                    current_blocks
+                                                );
+                                                println!(
+                                                    "Connected blocks are valid: {}",
+                                                    current_blocks
+                                                );
+                                                self.show_sequence_popup = false;
+                                                self.sequence_popup_text.clear();
+                                            }
+                                            Err(message) => {
+                                                self.status_message =
+                                                    "Invalid block order detected".to_string();
+                                                self.sequence_popup_text = message;
+                                                self.show_sequence_popup = true;
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+                    }
+                }
+
+                if ui.button("Export .ino").clicked() {
+                    match self.validate_block_inputs() {
+                        Err(message) => {
+                            self.status_message =
+                                "Invalid block inputs detected.".to_string();
+                            self.validation_popup_text = message;
+                            self.show_validation_popup = true;
+                        }
+                        Ok(()) => match self.validate_pin_consistency() {
+                            Err(message) => {
+                                self.status_message =
+                                    "Pin mismatch detected.".to_string();
+                                self.validation_popup_text = message;
+                                self.show_validation_popup = true;
+                            }
+                            Ok(()) => match self.export_ino() {
+                                Ok(path) => {
+                                    self.status_message = format!(
+                                        "Exported Arduino sketch to {}",
+                                        path.display()
+                                    );
+                                }
+                                Err(err) => {
+                                    self.status_message = err;
+                                }
+                            },
+                        },
                     }
                 }
 
@@ -826,7 +1331,8 @@ impl eframe::App for BlocksForArduino {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let size = egui::vec2(GLOBAL_X, GLOBAL_Y);
+            // --- CENTRAL CANVAS ---
+            // Renders the main editor area with palette blocks on left and code canvas on right
             let screen = ui.max_rect();
             let divider_x = screen.left() + 300.0;
 
@@ -905,6 +1411,7 @@ impl eframe::App for BlocksForArduino {
                 (self.palette_scroll_offset - scroll_delta_y).clamp(0.0, max_scroll);
 
             // ---- blocks -----------------------------------------------------
+            let size = egui::vec2(GLOBAL_X, GLOBAL_Y);
             for i in 0..self.sections.len() {
                 let is_palette = self.sections[i].is_palette;
 

@@ -15,7 +15,7 @@
         {
           "id": "A_C_E",
           "descriptor": "Arduino equivalent",
-          "Code_Equivelant": "pinMode({pin}, OUTPUT),"
+          "Code_Equivelant": "pinMode({pin}, OUTPUT);"
         }
       ]
     }
